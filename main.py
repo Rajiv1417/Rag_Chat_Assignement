@@ -8,6 +8,11 @@ Run with:
 API docs available at:
     http://localhost:8000/docs
 """
+import sys
+import os
+ 
+# Ensure project root is in Python path (required for Codespaces / non-package runs)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
