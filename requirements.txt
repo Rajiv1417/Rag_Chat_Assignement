@@ -1,0 +1,21 @@
+# FastAPI & Server
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+
+# PDF Parsing
+pymupdf==1.25.1
+
+# Embeddings (local, free)
+sentence-transformers==3.3.1
+
+# Vector Store
+chromadb==0.6.3
+
+# LLM + VLM (Gemini free tier)
+google-generativeai==0.8.3
+
+# Utilities
+pydantic==2.10.4
+python-dotenv==1.0.1
+pillow==11.1.0
