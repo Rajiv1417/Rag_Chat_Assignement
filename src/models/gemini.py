@@ -27,42 +27,48 @@ def _get_model() -> genai.GenerativeModel:
 def _strip_thinking(text: str) -> str:
     """
     Extract actual answer from Gemma 4's response.
-
-    Gemma 4 consistently wraps its answer in patterns like:
-      - "**Analyze the image:** <actual content>"
-      - "**Final Answer:** <actual content>"
-      - "Final Answer: <actual content>"
-
-    Priority order:
-      1. Look for known Gemma 4 answer markers → take content after them
-      2. Strip Gemma 4 thinking tags
-      3. Fallback: return original text
+ 
+    Gemma 4 pattern (observed):
+      *   Constraint 1: ...              ← bullet reasoning (REMOVE)
+      *   Start: "Based on..."           ← bullet (REMOVE)
+      Based on the provided document,... ← ACTUAL ANSWER (KEEP from here)
+      Sources: [Source N]...             ← citation (KEEP)
+ 
+    Priority:
+      1. Find LAST "Based on the provided document" → take from there
+      2. Find last non-bullet prose block (fallback)
+      3. Return original (last resort)
     """
-    # ── Priority 1: Gemma 4 answer markers ───────────────────────────────────
-    answer_markers = [
-        r"\*\*Analyze the image:\*\*",   # **Analyze the image:**
-        r"\*\*Final Answer:\*\*",         # **Final Answer:**
-        r"Final Answer:",                  # Final Answer:
-        r"\*\*Answer:\*\*",               # **Answer:**
-        r"\*\*Description:\*\*",          # **Description:**
-        r"\*\*Response:\*\*",             # **Response:**
-    ]
-
-    for marker in answer_markers:
-        match = re.search(marker, text)
-        if match:
-            after = text[match.end():].strip()
-            if after:
-                return after
-
-    # ── Priority 2: Gemma 4 thinking tags ────────────────────────────────────
-    cleaned = re.sub(
+     # Step 1: Strip Gemma thinking tags
+    text = re.sub(
         r"<\|channel\>thought.*?<channel\|>", "", text, flags=re.DOTALL
     ).strip()
-    if cleaned and cleaned != text:
-        return cleaned
+ 
+    # Step 2: Find LAST occurrence of anchor phrase — take everything from there
+    anchor = "Based on the provided document"
+    last_idx = text.rfind(anchor)
+    if last_idx != -1:
+        return text[last_idx:].strip()
 
-    # ── Priority 3: Fallback — return as-is ──────────────────────────────────
+    # Step 3: Fallback — walk from end, find last non-bullet prose block
+    def is_bullet(line: str) -> bool:
+        s = line.strip()
+        return bool(s and re.match(r"^(\*+|-|\d+\.)\s+", s))
+ 
+    lines = text.split("\n")
+    clean_start = len(lines)
+    for i in range(len(lines) - 1, -1, -1):
+        if not lines[i].strip():
+            continue
+        if is_bullet(lines[i]):
+            break
+        clean_start = i
+ 
+    clean_block = "\n".join(lines[clean_start:]).strip()
+    if clean_block and len(clean_block) > 20:
+        return clean_block
+ 
+    # Step 4: Last resort
     return text
 
 
@@ -128,31 +134,25 @@ def generate_answer(question: str, context_chunks: list) -> str:
             f"{'—' * 60}\n"
         )
 
-    prompt = f"""
-You are a Tata Motors service assistant.
-
-Answer ONLY using the provided context.
-
-Rules:
-- Do NOT explain your reasoning
-- Do NOT repeat instructions
-- Do NOT mention context or sources in explanation
-- If answer not found, say: "Information not available in provided documents."
-
-At the end, add:
-Sources: [Source N] filename, page X
-
+    prompt = f"""You are an expert Tata Motors service assistant.
+Answer the question using ONLY the provided context.
+Do not show your thinking, reasoning, or bullet-point analysis.
+Write your answer as clean prose paragraphs only.
+Do not make up information not present in the context.
+If the context does not contain enough information, say so clearly.
+start  with: : "Based on the provided document, <answer>".
+End with: "Sources: [Source N] filename, page X"
+ 
 CONTEXT:
 {context_text}
-
+ 
 QUESTION: {question}
-
-FINAL ANSWER:
-"""
+ 
+ANSWER:"""
 
     response = model.generate_content(
         prompt,
-        generation_config=genai.GenerationConfig(temperature=0.2),
+        generation_config=genai.GenerationConfig(temperature=0.1),
     )
 
     return _strip_thinking(response.text.strip())

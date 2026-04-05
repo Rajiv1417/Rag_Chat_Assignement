@@ -55,10 +55,6 @@ def main():
 
         print(f"\n📦 Retrieved {len(retrieved_chunks)} chunks")
 
-        for i, c in enumerate(retrieved_chunks, 1):
-            print(f"\n[Chunk {i}] ({c['chunk_type']}) Page {c['page']} | Score: {c['score']}")
-            print(c["text"][:200])
-
         answer = generate_answer(q, retrieved_chunks)
 
         print("\n💡 ANSWER:")
