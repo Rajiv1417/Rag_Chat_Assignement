@@ -128,21 +128,27 @@ def generate_answer(question: str, context_chunks: list) -> str:
             f"{'—' * 60}\n"
         )
 
-    prompt = f"""You are an expert Tata Motors service assistant.
-Answer the question using ONLY the provided context.
-Do not show your thinking or reasoning process.
-Do not make up information not present in the context.
-If the context does not contain enough information, say so clearly.
+    prompt = f"""
+You are a Tata Motors service assistant.
 
-After your answer, list the sources used as:
-"Sources: [Source N] filename, page X"
+Answer ONLY using the provided context.
+
+Rules:
+- Do NOT explain your reasoning
+- Do NOT repeat instructions
+- Do NOT mention context or sources in explanation
+- If answer not found, say: "Information not available in provided documents."
+
+At the end, add:
+Sources: [Source N] filename, page X
 
 CONTEXT:
 {context_text}
 
 QUESTION: {question}
 
-ANSWER:"""
+FINAL ANSWER:
+"""
 
     response = model.generate_content(
         prompt,
@@ -150,3 +156,4 @@ ANSWER:"""
     )
 
     return _strip_thinking(response.text.strip())
+

@@ -94,7 +94,7 @@ for i, chunk in enumerate(test_chunks, 1):
     print(f"\n  Image {i}/{MAX_IMAGES_TO_TEST} — page {chunk.page}")
     print(f"  File: {chunk.image_path}")
     try:
-        summary = summarize_image(chunk.image_path)
+        summary = summarize_image(chunk.image_path) # type: ignore
         last_summary = summary
         print(f"  ✅ PASS — {len(summary)} chars returned")
         print(f"  Preview: {repr(summary[:250])}")

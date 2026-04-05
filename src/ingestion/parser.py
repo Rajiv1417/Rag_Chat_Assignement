@@ -57,6 +57,15 @@ def _bbox_contains(table_bbox: tuple, block_bbox: tuple) -> bool:
     return (bx0 >= tx0 - tolerance and by0 >= ty0 - tolerance and
             bx1 <= tx1 + tolerance and by1 <= ty1 + tolerance)
 
+def check_pdf_path(pdf_path: str):
+    """Validate PDF path and raise exceptions if invalid."""
+    if not Path(pdf_path).exists():
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+    if not Path(pdf_path).is_file():
+        raise ValueError(f"Path is not a file: {pdf_path}")
+    if Path(pdf_path).suffix.lower() != ".pdf":
+        raise ValueError(f"File is not a PDF: {pdf_path}")
+
 
 def parse_pdf(pdf_path: str, image_output_dir: str = "extracted_images") -> list[ParsedChunk]:
     """

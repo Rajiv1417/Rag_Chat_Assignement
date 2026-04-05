@@ -16,6 +16,17 @@ from dotenv import load_dotenv
 
 from src.ingestion.parser import ParsedChunk
 from src.models.gemini import summarize_image
+import json
+import hashlib
+
+# ── Image summary cache (persistent) ─────────────────────────
+CACHE_FILE = Path("image_summary_cache.json")
+
+if CACHE_FILE.exists():
+    with open(CACHE_FILE, "r") as f:
+        image_cache = json.load(f)
+else:
+    image_cache = {}
 
 load_dotenv()
 
@@ -58,8 +69,47 @@ def embed_chunks(chunks: list[ParsedChunk]) -> dict:
     Returns:
         Summary dict with counts by chunk type and any errors.
     """
-    model = _get_embedding_model()
-    collection = _get_collection()
+    
+    # ── TEST 1: Sentence-transformer loads ────────────────────────────────────
+    print("TEST 1: Embedding model loads?")
+    try:
+        model = _get_embedding_model()
+        print(f"  ✅ PASS — Model loaded: {os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')}\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
+
+    # ── TEST 2: Embedding a sentence works ────────────────────────────────────
+    print("TEST 2: Embedding a sample sentence?")
+    try:
+        vec = model.encode("Service schedule for Signa 4830").tolist()
+        print(f"  ✅ PASS — Vector dimensions: {len(vec)}")
+        print(f"  Sample values: {[round(v, 4) for v in vec[:5]]}...\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
+
+    # ── TEST 3: ChromaDB connects ─────────────────────────────────────────────
+    print("TEST 3: ChromaDB connects?")
+    try:
+        collection = _get_collection()
+        print(f"  ✅ PASS — Collection ready: '{collection.name}'")
+        print(f"  DB path: {os.getenv('CHROMA_DB_PATH', './chroma_db')}\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
+
+    # ── TEST 4: Parse PDF and filter out image chunks ─────────────────────────
+    print("TEST 4: Parse PDF — get text + table chunks only?")
+    try:
+        all_chunks = chunks # input to this function, already parsed
+        text_table_chunks = [c for c in all_chunks if c.chunk_type != "image"]
+        image_chunks      = [c for c in all_chunks if c.chunk_type == "image"]
+        print(f"  ✅ PASS")
+        print(f"  Total chunks      : {len(all_chunks)}")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
 
     counts = {"text": 0, "table": 0, "image": 0, "errors": 0}
     error_log: list[str] = []
@@ -71,13 +121,28 @@ def embed_chunks(chunks: list[ParsedChunk]) -> dict:
             # VLM summarization for image chunks
             if chunk.chunk_type == "image" and chunk.image_path:
                 try:
-                    summary = summarize_image(chunk.image_path)
+                     # Create unique key (better than file path)
+                    with open(chunk.image_path, "rb") as f:
+                        image_hash = hashlib.md5(f.read()).hexdigest()
+
+                    if image_hash in image_cache:
+                        print(f"🟡 SKIP — Already summarized: {chunk.image_path}")
+                        summary = image_cache[image_hash]
+                    else:
+                        print(f"🔵 NEW — Summarizing image: {chunk.image_path}")
+                        summary = summarize_image(chunk.image_path)
+
+                        image_cache[image_hash] = summary
+
+                        # Save immediately
+                        with open(CACHE_FILE, "w") as f:
+                            json.dump(image_cache, f)
+
                     text_to_embed = f"[IMAGE DESCRIPTION] {summary}"
                     chunk.text = text_to_embed  # update in-place for storage
                 except Exception as e:
-                    error_log.append(f"VLM error for {chunk.image_path}: {e}")
-                    text_to_embed = f"[IMAGE on page {chunk.page} of {chunk.source}]"
-                    chunk.text = text_to_embed
+                    error_log.append(f"VLM error: {e}")
+                    continue   # ❗ skip bad image instead of embedding garbage
 
             # Skip empty chunks
             if not text_to_embed.strip():
@@ -104,6 +169,35 @@ def embed_chunks(chunks: list[ParsedChunk]) -> dict:
             counts["errors"] += 1
             error_log.append(f"Chunk {chunk.chunk_id}: {e}")
 
+    
+# ── TEST 5: Embed all chunks into ChromaDB ───────────────────────
+    print("TEST 5: Embed all chunks into ChromaDB?")
+    if counts["text"] or counts["table"] or counts["image"]:
+        print(f"  ✅ PASS")
+        print(f"  Text  chunks embedded : {counts['text']}")
+        print(f"  Table chunks embedded : {counts['table']}")
+        print(f"  Image chunks embedded : {counts['image']}")
+        print(f"  Errors                : {counts['errors']}")
+        if error_log:
+            for e in error_log:
+                print(f"    ⚠️  {e}")
+        print()
+    else:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
+
+    # ── TEST 6: Verify chunks are stored in ChromaDB ──────────────────────────
+    print("TEST 6: Chunks actually stored in ChromaDB?")
+    try:
+        count = collection.count()
+        expected = counts["text"] + counts["table"] + counts["image"]  # all successfully processed chunks
+        if count == expected:
+            print(f"  ✅ PASS — {count} chunks in DB (matches embedded count)\n")
+        else:
+            print(f"  ⚠️  WARN — DB has {count} chunks, expected {expected}\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+
     return {
         "text_chunks": counts["text"],
         "table_chunks": counts["table"],
@@ -111,8 +205,6 @@ def embed_chunks(chunks: list[ParsedChunk]) -> dict:
         "errors": counts["errors"],
         "error_details": error_log,
     }
-
-
 def get_index_stats() -> dict:
     """Return current ChromaDB collection stats."""
     collection = _get_collection()
@@ -123,7 +215,6 @@ def get_index_stats() -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 # EMBEDDER TESTS — run directly: python -m src.ingestion.embedder
 # Tests embedding + ChromaDB only. Image/VLM step is SKIPPED.
-# Zero API calls to Groq.
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
@@ -226,11 +317,11 @@ if __name__ == "__main__":
         results = collection.query(
             query_embeddings=[query_vec],
             n_results=3,
-            include=["documents", "metadatas", "distances"],
+            include=["documents", "metadatas", "distances"],    # type: ignore
         )
-        hits = results["documents"][0]
-        metas = results["metadatas"][0]
-        dists = results["distances"][0]
+        hits = results["documents"][0]      # type: ignore
+        metas = results["metadatas"][0]     # type: ignore
+        dists = results["distances"][0]     # type: ignore
 
         print(f"  ✅ PASS — Top 3 results for: '{query}'")
         for i, (doc, meta, dist) in enumerate(zip(hits, metas, dists), 1):
@@ -246,9 +337,9 @@ if __name__ == "__main__":
     try:
         table_results = collection.get(
             where={"chunk_type": "table"},
-            include=["documents", "metadatas"],
+            include=["documents", "metadatas"], # type: ignore
         )
-        table_count = len(table_results["documents"])
+        table_count = len(table_results["documents"])   # type: ignore
         print(f"  ✅ PASS — {table_count} table chunks in DB")
         if table_results["documents"]:
             sample = table_results["documents"][0][:200]

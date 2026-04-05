@@ -22,7 +22,7 @@ def check_parser() -> dict:
     try:
         # Create a tiny in-memory PDF to test fitz
         doc = fitz.open()  # type: ignore[attr-defined]
-        doc.new_page()
+        doc.new_page()     # type: ignore
         doc.close()
         return {"status": "ok", "detail": "PyMuPDF operational"}
     except Exception as e:
@@ -40,8 +40,8 @@ def check_vector_store() -> dict:
         # Breakdown by chunk type
         breakdown = {"text": 0, "table": 0, "image": 0}
         if count > 0:
-            results = collection.get(include=["metadatas"])
-            for meta in results["metadatas"]:
+            results = collection.get(include=["metadatas"]) # type: ignore
+            for meta in results["metadatas"]:               # type: ignore
                 ctype = meta.get("chunk_type", "text")
                 if ctype in breakdown:
                     breakdown[ctype] += 1
