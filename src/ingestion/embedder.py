@@ -118,3 +118,43 @@ def get_index_stats() -> dict:
     collection = _get_collection()
     count = collection.count()
     return {"total_chunks": count}
+
+
+if __name__ == "__main__":
+    from src.ingestion.parser import parse_pdf
+
+    print("\n--- FULL PIPELINE TEST (PDF → CHUNKS → EMBEDDINGS) ---\n")
+
+    # 👉 Put your actual PDF path here
+    pdf_path = "Documens/pdfs/SC_2025_36 Introduction of LPT 1612g with 3.8 SGI TC CNG BS6 Ph2.pdf"
+
+    if not os.path.exists(pdf_path):
+        print(f"[ERROR] PDF not found: {pdf_path}")
+        exit()
+
+    # Step 1: Parse PDF
+    print("\n[STEP 1] Parsing PDF...")
+    chunks = parse_pdf(pdf_path)
+
+    print(f"Total chunks extracted: {len(chunks)}")
+
+    # Optional: quick breakdown
+    type_count = {"text": 0, "table": 0, "image": 0}
+    for c in chunks:
+        type_count[c.chunk_type] += 1
+
+    print("Chunk distribution:", type_count)
+
+    # Step 2: Embed + store
+    print("\n[STEP 2] Embedding & storing...")
+    result = embed_chunks(chunks)
+
+    print("\n--- EMBEDDING RESULT ---")
+    print(result)
+
+    # Step 3: DB stats
+    stats = get_index_stats()
+    print("\n--- DB STATS ---")
+    print(stats)
+
+    print("\n--- PIPELINE COMPLETED ---\n")

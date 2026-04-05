@@ -19,7 +19,7 @@ def _get_client() -> genai.GenerativeModel:
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set in .env file")
     genai.configure(api_key=api_key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     return genai.GenerativeModel(model_name)
 
 
@@ -97,3 +97,53 @@ ANSWER:"""
 
     response = model.generate_content(prompt)
     return response.text.strip()
+
+
+if __name__ == "__main__":
+    print("Available Generative AI Models:")
+    for m in genai.list_models():
+        if "embedContent" in m.supported_generation_methods:
+            print(f"  - {m.name} (Embeddings)")
+        else:
+            print(f"  - {m.name}")
+    # -------- TEST 1: Image Summarization --------
+    try:
+        test_image_path = "/workspaces/Rag_Chat_Assignement/Documens/images/Service Circular LPT 1612g.png"  # put any test image here
+
+        if os.path.exists(test_image_path):
+            print("\n--- IMAGE SUMMARY TEST ---\n")
+            summary = summarize_image(test_image_path)
+            print(summary)
+        else:
+            print("\n[SKIP] sample.png not found for image test")
+
+    except Exception as e:
+        print(f"\n[ERROR - IMAGE TEST]: {e}")
+
+
+    # -------- TEST 2: Q&A with Context --------
+    try:
+        print("\n--- QA TEST ---\n")
+
+        sample_context = [
+            {
+                "text": "The LPT 1612g CNG BS6 Phase 2 truck uses a 3.8 SGI TC engine with improved fuel efficiency and reduced emissions.",
+                "source": "LPT_1612g_doc.pdf",
+                "page": 3,
+                "chunk_type": "text"
+            },
+            {
+                "text": "Maintenance interval for engine oil is 20,000 km under standard operating conditions.",
+                "source": "LPT_1612g_doc.pdf",
+                "page": 12,
+                "chunk_type": "table"
+            }
+        ]
+
+        question = "What engine is used in LPT 1612g and what is the service interval?"
+
+        answer = generate_answer(question, sample_context)
+        print(answer)
+
+    except Exception as e:
+        print(f"\n[ERROR - QA TEST]: {e}")
