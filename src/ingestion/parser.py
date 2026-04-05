@@ -70,18 +70,21 @@ def parse_pdf(pdf_path: str, image_output_dir: str = "extracted_images") -> list
     Returns:
         List of ParsedChunk objects (text + table + image chunks).
     """
-    pdf_path = Path(pdf_path)
-    source_name = pdf_path.name
+    pdf = Path(pdf_path)
+    source_name = pdf.name
     image_dir = Path(image_output_dir)
     image_dir.mkdir(parents=True, exist_ok=True)
 
     chunks: list[ParsedChunk] = []
 
-    doc = fitz.open(str(pdf_path))
+    doc = fitz.open(str(pdf))
 
-    for page_num, page in enumerate(doc, start=1):
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        page_num += 1  # 1-indexed for display
+
         # ── 1. Extract text and table blocks ──────────────────────────
-        blocks = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+        blocks = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]  # type: ignore[attr-defined]
 
         text_buffer: list[str] = []
 
@@ -140,7 +143,7 @@ def parse_pdf(pdf_path: str, image_output_dir: str = "extracted_images") -> list
                 ))
 
         # ── 2. Extract images ──────────────────────────────────────────
-        image_list = page.get_images(full=True)
+        image_list = page.get_images(full=True)  # type: ignore[attr-defined]
         for img_index, img_ref in enumerate(image_list):
             xref = img_ref[0]
             base_image = doc.extract_image(xref)

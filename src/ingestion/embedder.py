@@ -21,7 +21,7 @@ load_dotenv()
 
 # ── Singleton pattern: load heavy models once ──────────────────────────────────
 _embedding_model: SentenceTransformer | None = None
-_chroma_client: chromadb.PersistentClient | None = None
+_chroma_client = None
 _collection: chromadb.Collection | None = None
 
 
