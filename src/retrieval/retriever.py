@@ -18,7 +18,7 @@ _collection = None
 def _get_embedding_model() -> SentenceTransformer:
     global _embedding_model
     if _embedding_model is None:
-        model_name = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
+        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
         _embedding_model = SentenceTransformer(model_name)
     return _embedding_model
 
@@ -53,41 +53,11 @@ def retrieve(query: str, top_k: int = 5) -> list[dict]:
 
     model = _get_embedding_model()
     query_embedding = model.encode(query).tolist()
-    print("TEST: Semantic retrieval — can we find relevant chunks?")
-    try:
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(top_k, collection.count()),
-            include=["documents", "metadatas", "distances"], # type: ignore
-        )
-        hits = results["documents"][0]      # type: ignore
-        metas = results["metadatas"][0]     # type: ignore
-        dists = results["distances"][0]     # type: ignore
-
-        print(f"  ✅ PASS — Top 3 results for: '{query}'")
-        for i, (doc, meta, dist) in enumerate(zip(hits, metas, dists), 1):
-            score = round(1 - dist, 4)
-            print(f"\n  Result {i} | page={meta['page']} | type={meta['chunk_type']} | score={score}")
-            print(f"  {repr(doc[:120])}")
-        print()
-    except Exception as e:
-        print(f"  ❌ FAIL — {e}\n")
-
-     # ── TEST 8: Table chunks are retrievable separately ───────────────────────
-    print("TEST 8: Table chunks retrievable?")
-    try:
-        table_results = collection.get(
-            where={"chunk_type": "table"},
-            include=["documents", "metadatas"], # type: ignore
-        )
-        table_count = len(table_results["documents"])   # type: ignore
-        print(f"  ✅ PASS — {table_count} table chunks in DB")
-        if table_results["documents"]:
-            sample = table_results["documents"][0][:200]
-            print(f"  Sample table chunk: {repr(sample)}")
-        print()
-    except Exception as e:
-        print(f"  ❌ FAIL — {e}\n")
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        include=["documents", "metadatas", "distances"], # type: ignore
+    )
 
     chunks = []
     for doc, meta, dist in zip(

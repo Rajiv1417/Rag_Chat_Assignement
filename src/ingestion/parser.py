@@ -26,7 +26,6 @@ class ParsedChunk:
     chunk_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     image_path: str | None = None
 
-
 def _table_to_text(table_data: list) -> str:
     """
     Convert PyMuPDF table (list of rows) to pipe-separated text.

@@ -19,6 +19,10 @@ from src.models.gemini import summarize_image
 import json
 import hashlib
 
+def generate_chunk_id(chunk):
+    unique_string = f"{chunk.source}_{chunk.page}_{chunk.chunk_type}_{chunk.text}"
+    return hashlib.md5(unique_string.encode()).hexdigest()
+
 # ── Image summary cache (persistent) ─────────────────────────
 CACHE_FILE = Path("image_summary_cache.json")
 
@@ -69,48 +73,8 @@ def embed_chunks(chunks: list[ParsedChunk]) -> dict:
     Returns:
         Summary dict with counts by chunk type and any errors.
     """
-    
-    # ── TEST 1: Sentence-transformer loads ────────────────────────────────────
-    print("TEST 1: Embedding model loads?")
-    try:
-        model = _get_embedding_model()
-        print(f"  ✅ PASS — Model loaded: {os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')}\n")
-    except Exception as e:
-        print(f"  ❌ FAIL — {e}\n")
-        sys.exit(1)
-
-    # ── TEST 2: Embedding a sentence works ────────────────────────────────────
-    print("TEST 2: Embedding a sample sentence?")
-    try:
-        vec = model.encode("Service schedule for Signa 4830").tolist()
-        print(f"  ✅ PASS — Vector dimensions: {len(vec)}")
-        print(f"  Sample values: {[round(v, 4) for v in vec[:5]]}...\n")
-    except Exception as e:
-        print(f"  ❌ FAIL — {e}\n")
-        sys.exit(1)
-
-    # ── TEST 3: ChromaDB connects ─────────────────────────────────────────────
-    print("TEST 3: ChromaDB connects?")
-    try:
-        collection = _get_collection()
-        print(f"  ✅ PASS — Collection ready: '{collection.name}'")
-        print(f"  DB path: {os.getenv('CHROMA_DB_PATH', './chroma_db')}\n")
-    except Exception as e:
-        print(f"  ❌ FAIL — {e}\n")
-        sys.exit(1)
-
-    # ── TEST 4: Parse PDF and filter out image chunks ─────────────────────────
-    print("TEST 4: Parse PDF — get text + table chunks only?")
-    try:
-        all_chunks = chunks # input to this function, already parsed
-        text_table_chunks = [c for c in all_chunks if c.chunk_type != "image"]
-        image_chunks      = [c for c in all_chunks if c.chunk_type == "image"]
-        print(f"  ✅ PASS")
-        print(f"  Total chunks      : {len(all_chunks)}")
-    except Exception as e:
-        print(f"  ❌ FAIL — {e}\n")
-        sys.exit(1)
-
+    model = _get_embedding_model()
+    collection = _get_collection()
     counts = {"text": 0, "table": 0, "image": 0, "errors": 0}
     error_log: list[str] = []
 
@@ -150,10 +114,11 @@ def embed_chunks(chunks: list[ParsedChunk]) -> dict:
 
             # Generate embedding
             embedding = model.encode(text_to_embed).tolist()
+            chunk_id = generate_chunk_id(chunk)
 
             # Upsert into ChromaDB
             collection.upsert(
-                ids=[chunk.chunk_id],
+                ids=[chunk_id],
                 embeddings=[embedding],
                 documents=[text_to_embed],
                 metadatas=[{
@@ -162,41 +127,11 @@ def embed_chunks(chunks: list[ParsedChunk]) -> dict:
                     "chunk_type": chunk.chunk_type,
                 }],
             )
-
             counts[chunk.chunk_type] += 1
 
         except Exception as e:
             counts["errors"] += 1
             error_log.append(f"Chunk {chunk.chunk_id}: {e}")
-
-    
-# ── TEST 5: Embed all chunks into ChromaDB ───────────────────────
-    print("TEST 5: Embed all chunks into ChromaDB?")
-    if counts["text"] or counts["table"] or counts["image"]:
-        print(f"  ✅ PASS")
-        print(f"  Text  chunks embedded : {counts['text']}")
-        print(f"  Table chunks embedded : {counts['table']}")
-        print(f"  Image chunks embedded : {counts['image']}")
-        print(f"  Errors                : {counts['errors']}")
-        if error_log:
-            for e in error_log:
-                print(f"    ⚠️  {e}")
-        print()
-    else:
-        print(f"  ❌ FAIL — {e}\n")
-        sys.exit(1)
-
-    # ── TEST 6: Verify chunks are stored in ChromaDB ──────────────────────────
-    print("TEST 6: Chunks actually stored in ChromaDB?")
-    try:
-        count = collection.count()
-        expected = counts["text"] + counts["table"] + counts["image"]  # all successfully processed chunks
-        if count == expected:
-            print(f"  ✅ PASS — {count} chunks in DB (matches embedded count)\n")
-        else:
-            print(f"  ⚠️  WARN — DB has {count} chunks, expected {expected}\n")
-    except Exception as e:
-        print(f"  ❌ FAIL — {e}\n")
 
     return {
         "text_chunks": counts["text"],
