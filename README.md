@@ -40,7 +40,7 @@ graph TD
     B --> C[Text Chunks]
     B --> D[Table Chunks]
     B --> E[Raw Images]
-    E --> F[Gemini 1.5 Flash Vision\nImage → Text Summary]
+    E --> F[Gemma 4 Vision\nImage → Text Summary]
     F --> G[Image Summary Chunks]
     C --> H[sentence-transformers\nall-MiniLM-L6-v2]
     D --> H
@@ -51,7 +51,7 @@ graph TD
     K --> L[Semantic Search\nChromaDB]
     I --> L
     L --> M[Top-K Chunks\ntext + table + image]
-    M --> N[Gemini 1.5 Flash LLM\nGrounded Answer Generation]
+    M --> N[Gemma 4 LLM\nGrounded Answer Generation]
     N --> O[Answer + Source References]
 ```
 
@@ -64,176 +64,12 @@ graph TD
 | **PDF Parser** | PyMuPDF (fitz) | Fastest PDF library in Python; handles text, tables, and image extraction reliably without a Java runtime (unlike Apache PDFBox). Docling was considered but adds heavy dependencies. |
 | **Embeddings** | sentence-transformers `all-MiniLM-L6-v2` | Runs fully locally — no API cost, no rate limits. At 90MB, it fits comfortably in GitHub Codespaces (4GB RAM). Produces strong semantic embeddings for technical English. |
 | **Vector Store** | ChromaDB (local persistent) | Zero-config local setup with a persistent on-disk store. No server process needed. Supports cosine similarity natively. Pinecone was considered but requires a paid plan for persistence. |
-| **LLM** | Google Gemini 1.5 Flash | Free tier provides 1M tokens/day and 15 RPM — sufficient for development and evaluation. One API key covers both LLM and Vision tasks. |
-| **VLM (Vision)** | Gemini 1.5 Flash (same model) | Gemini's multimodal capability handles image description natively. Using the same model eliminates a second API key and simplifies configuration vs. a separate LLaVA or GPT-4o Vision setup. |
+| **LLM** | Google Gemma 4| Free tier provides 1M tokens/day and 15 RPM — sufficient for development and evaluation. One API key covers both LLM and Vision tasks. |
+| **VLM (Vision)** | Gemma 4 (same model) | Gemini's multimodal capability handles image description natively. Using the same model eliminates a second API key and simplifies configuration vs. a separate LLaVA or GPT-4o Vision setup. |
 | **Framework** | FastAPI (direct, no LangChain) | LangChain adds abstraction overhead. Direct implementation with FastAPI + ChromaDB + Gemini gives cleaner, more debuggable code and demonstrates deeper understanding of the RAG pipeline. |
-
----
-
-## Setup Instructions
-
-### Option A: GitHub Codespaces (Recommended)
-
-1. **Open in Codespaces**
-   - Go to your forked repository on GitHub
-   - Click `Code` → `Codespaces` → `Create codespace on main`
-   - Wait ~2 minutes for the environment to build (dependencies auto-install via `devcontainer.json`)
-
-2. **Add your Gemini API Key**
-   - Get a free key at: https://aistudio.google.com/app/apikey
-   - In the Codespace terminal:
-     ```bash
-     cp .env.example .env
-     # Open .env and replace 'your_gemini_api_key_here' with your actual key
-     ```
-   - Or set it as a Codespaces secret (recommended):
-     - GitHub → Settings → Codespaces → New Secret → `GEMINI_API_KEY`
-
-3. **Run the server**
-   ```bash
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
-   ```
-
-4. **Access the API**
-   - Codespaces will prompt to open port 8000 — click **Open in Browser**
-   - Navigate to `/docs` for the Swagger UI
-
----
-
-### Option B: Local Machine
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-cd YOUR_REPO_NAME
-
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
-
-# 5. Run the server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# 6. Open API docs
-# http://localhost:8000/docs
-```
-
----
-
-## API Documentation
-
-### GET `/health`
-Returns system status.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "uptime_seconds": 142.3,
-  "total_chunks_indexed": 87,
-  "gemini_model": "gemini-1.5-flash",
-  "embedding_model": "all-MiniLM-L6-v2"
-}
-```
-
----
-
-### POST `/ingest`
-Upload a PDF to parse and index.
-
-**Request:** `multipart/form-data` with a `.pdf` file
-
-**Response:**
-```json
-{
-  "filename": "signa_4830_workshop_manual.pdf",
-  "text_chunks": 54,
-  "table_chunks": 18,
-  "image_chunks": 15,
-  "total_chunks": 87,
-  "processing_time_seconds": 12.4,
-  "errors": 0
-}
-```
-
-**Error cases:**
-- `400` — Non-PDF file uploaded
-- `422` — PDF has no extractable content
-
----
-
-### POST `/query`
-Ask a natural language question.
-
-**Request:**
-```json
-{
-  "question": "What is the service schedule for Signa 4830 BSVI?",
-  "top_k": 5
-}
-```
-
-**Response:**
-```json
-{
-  "question": "What is the service schedule for Signa 4830 BSVI?",
-  "answer": "Based on the indexed service circular, the Signa 4830 BSVI requires...\n\nSources: [Source 1] signa_4830_workshop_manual.pdf, page 12",
-  "sources": [
-    {
-      "source": "signa_4830_workshop_manual.pdf",
-      "page": 12,
-      "chunk_type": "table",
-      "relevance_score": 0.91
-    }
-  ],
-  "chunks_retrieved": 5
-}
-```
-
-**Error cases:**
-- `400` — Empty question
-- `404` — No documents indexed yet
-
----
-
-### GET `/docs`
-Auto-generated Swagger UI — interactive API documentation. Available at `/docs` once the server is running.
-
----
-
-## Screenshots
-
-*(Add screenshots here after running the system)*
-
-- `screenshots/01_swagger_ui.png` — /docs page
-- `screenshots/02_ingest_response.png` — POST /ingest with sample PDF
-- `screenshots/03_text_query.png` — Text-based query result
-- `screenshots/04_table_query.png` — Table-based query result
-- `screenshots/05_image_query.png` — Image summary query result
-- `screenshots/06_health_endpoint.png` — /health response
-
----
-
-## Limitations & Future Work
-
-**Current Limitations:**
-- Table detection uses a heuristic (span count per line) — complex merged-cell tables may not parse perfectly
-- Image extraction skips files under 5KB (logos, icons) — very small diagrams may be missed
-- No cross-document reference linking (e.g., a circular referencing another circular)
-- ChromaDB local store is not shared across Codespace rebuilds unless committed (intentionally excluded via `.gitignore`)
-- Gemini free tier: 15 requests/minute — bulk ingestion of large PDFs may hit rate limits
-
-**Future Improvements:**
-- Hybrid search (semantic + BM25 keyword) for exact technical term matching (e.g., part numbers)
-- Structured metadata filtering — query only service circulars, or only ICGs
-- Multi-turn conversation with session memory
-- Voice input for hands-free workshop use
-- Hindi/regional language support via Sarvam AI
-- CRM integration (Siebel) for vehicle-specific context enrichment
+![Swagger UI Docs](Screenshots/01_swagger_ui.png)
+![Health Check response](Screenshots/02_health_endpoint.png)
+![Successful Ingestion Response](screenshots/03_ingest_response.png)
+![Text Query Response](screenshots/04_text_query.png)
+![Table Query Response](screenshots/05_table_query.png)
+![Image Query Response](screenshots/06_image_query.png)
