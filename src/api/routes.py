@@ -15,11 +15,9 @@ from src.ingestion.parser import parse_pdf
 from src.ingestion.embedder import embed_chunks, get_index_stats
 from src.retrieval.retriever import retrieve
 from src.models.gemini import generate_answer
+from src.api.health import run_all_checks
 
 router = APIRouter()
-
-# Track server start time for uptime reporting
-_START_TIME = time.time()
 
 
 # ── Pydantic Models ────────────────────────────────────────────────────────────
@@ -27,9 +25,7 @@ _START_TIME = time.time()
 class HealthResponse(BaseModel):
     status: str
     uptime_seconds: float
-    total_chunks_indexed: int
-    gemini_model: str
-    embedding_model: str
+    checks: dict
 
 
 class IngestResponse(BaseModel):
@@ -40,6 +36,7 @@ class IngestResponse(BaseModel):
     total_chunks: int
     processing_time_seconds: float
     errors: int
+    warnings: list[str]
 
 
 class QueryRequest(BaseModel):
@@ -70,6 +67,7 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceReference]
     chunks_retrieved: int
+    system_warnings: list[str]
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -82,18 +80,18 @@ class QueryResponse(BaseModel):
 )
 def health_check():
     """
-    Returns system status including:
-    - Model readiness
-    - Number of indexed chunks
-    - Server uptime
+    Full system health report including:
+    - PDF parser status
+    - Vector store status + chunk breakdown (text/table/image)
+    - Embedding model status
+    - LLM/VLM API key check
+    - Warnings if any chunk type is missing
     """
-    stats = get_index_stats()
+    report = run_all_checks()
     return HealthResponse(
-        status="ok",
-        uptime_seconds=round(time.time() - _START_TIME, 1),
-        total_chunks_indexed=stats["total_chunks"],
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-        embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
+        status=report["status"],
+        uptime_seconds=report["uptime_seconds"],
+        checks=report["checks"],
     )
 
 
@@ -108,14 +106,10 @@ async def ingest_document(file: UploadFile = File(...)):
     """
     Upload a PDF file to parse, embed, and index.
 
-    Extracts:
-    - **Text chunks** — paragraphs and headings
-    - **Table chunks** — structured tables as text
-    - **Image chunks** — images summarized via Gemini Vision, then embedded
-
-    Returns a summary of ingested chunk counts and processing time.
+    Extracts text, table, and image chunks.
+    Returns chunk counts with warnings if any type is missing.
     """
-    if not file.filename.lower().endswith(".pdf"):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only PDF files are supported. Please upload a .pdf file.",
@@ -123,31 +117,39 @@ async def ingest_document(file: UploadFile = File(...)):
 
     start_time = time.time()
 
-    # Save uploaded file to a temp location
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
-        # Parse PDF into chunks
         chunks = parse_pdf(tmp_path, image_output_dir="extracted_images")
 
         if not chunks:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No content could be extracted from this PDF. "
-                       "Ensure the file contains text, tables, or images.",
+                detail="No content could be extracted from this PDF.",
             )
 
-        # Override source name to use original filename
         for chunk in chunks:
             chunk.source = file.filename
 
-        # Embed all chunks into ChromaDB
         result = embed_chunks(chunks)
 
-        processing_time = round(time.time() - start_time, 2)
+        # Smart warnings for missing chunk types
+        warnings: list[str] = []
+        if result["text_chunks"] == 0:
+            warnings.append("No text chunks extracted — PDF may be scanned or image-only")
+        if result["table_chunks"] == 0:
+            warnings.append("No table chunks found — PDF may not contain tables")
+        if result["image_chunks"] == 0:
+            warnings.append("No image chunks found — PDF may not contain images")
+        if result["errors"] > 0:
+            warnings.append(
+                f"{result['errors']} image(s) failed VLM summarization — "
+                "stored as placeholders, may affect image query accuracy"
+            )
+
         total = result["text_chunks"] + result["table_chunks"] + result["image_chunks"]
 
         return IngestResponse(
@@ -156,12 +158,12 @@ async def ingest_document(file: UploadFile = File(...)):
             table_chunks=result["table_chunks"],
             image_chunks=result["image_chunks"],
             total_chunks=total,
-            processing_time_seconds=processing_time,
+            processing_time_seconds=round(time.time() - start_time, 2),
             errors=result["errors"],
+            warnings=warnings,
         )
 
     finally:
-        # Clean up temp file
         Path(tmp_path).unlink(missing_ok=True)
 
 
@@ -174,11 +176,7 @@ async def ingest_document(file: UploadFile = File(...)):
 def query_documents(request: QueryRequest):
     """
     Ask a natural language question against all indexed documents.
-
-    Retrieves the most relevant text, table, and image-summary chunks,
-    then generates a grounded answer using Gemini.
-
-    Returns the answer with source references (filename, page, chunk type).
+    Returns grounded answer with source references and system warnings.
     """
     if not request.question.strip():
         raise HTTPException(
@@ -186,7 +184,6 @@ def query_documents(request: QueryRequest):
             detail="Question cannot be empty.",
         )
 
-    # Retrieve relevant chunks
     chunks = retrieve(query=request.question, top_k=request.top_k)
 
     if not chunks:
@@ -195,8 +192,16 @@ def query_documents(request: QueryRequest):
             detail="No documents indexed yet. Please POST a PDF to /ingest first.",
         )
 
-    # Generate grounded answer
     answer = generate_answer(question=request.question, context_chunks=chunks)
+
+    # Warn if retrieved chunks are all one type (low diversity = lower accuracy)
+    chunk_types = set(c["chunk_type"] for c in chunks)
+    warnings: list[str] = []
+    if len(chunk_types) == 1:
+        warnings.append(
+            f"All retrieved chunks are of type '{list(chunk_types)[0]}' — "
+            "answer may miss information from other modalities"
+        )
 
     sources = [
         SourceReference(
@@ -213,4 +218,5 @@ def query_documents(request: QueryRequest):
         answer=answer,
         sources=sources,
         chunks_retrieved=len(chunks),
+        system_warnings=warnings,
     )

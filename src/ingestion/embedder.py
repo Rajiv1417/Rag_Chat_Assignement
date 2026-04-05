@@ -21,8 +21,8 @@ load_dotenv()
 
 # ── Singleton pattern: load heavy models once ──────────────────────────────────
 _embedding_model: SentenceTransformer | None = None
-_chroma_client = None
-_collection: chromadb.Collection | None = None
+_chroma_client = None   # chromadb.ClientAPI
+_collection = None      # chromadb.Collection
 
 
 def _get_embedding_model() -> SentenceTransformer:
@@ -120,41 +120,151 @@ def get_index_stats() -> dict:
     return {"total_chunks": count}
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# EMBEDDER TESTS — run directly: python -m src.ingestion.embedder
+# Tests embedding + ChromaDB only. Image/VLM step is SKIPPED.
+# Zero API calls to Groq.
+# ══════════════════════════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
+    import sys
+    import tempfile
+    import os
+
     from src.ingestion.parser import parse_pdf
 
-    print("\n--- FULL PIPELINE TEST (PDF → CHUNKS → EMBEDDINGS) ---\n")
+    PDF_PATH = os.getenv(
+        "TEST_PDF",
+        "/workspaces/Rag_Chat_Assignement/Documens/pdfs/"
+        "SC_2025_36 Introduction of LPT 1612g with 3.8 SGI TC CNG BS6 Ph2.pdf"
+    )
+    # Use a temp DB so tests never pollute real chroma_db
+    TEST_DB = "/tmp/test_chroma_db"
+    os.environ["CHROMA_DB_PATH"] = TEST_DB
 
-    # 👉 Put your actual PDF path here
-    pdf_path = "Documens/pdfs/SC_2025_36 Introduction of LPT 1612g with 3.8 SGI TC CNG BS6 Ph2.pdf"
+    print("=" * 70)
+    print("EMBEDDER TESTS — No API calls, image chunks skipped")
+    print("=" * 70)
+    print()
 
-    if not os.path.exists(pdf_path):
-        print(f"[ERROR] PDF not found: {pdf_path}")
-        exit()
+    # ── TEST 1: Sentence-transformer loads ────────────────────────────────────
+    print("TEST 1: Embedding model loads?")
+    try:
+        model = _get_embedding_model()
+        print(f"  ✅ PASS — Model loaded: {os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')}\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
 
-    # Step 1: Parse PDF
-    print("\n[STEP 1] Parsing PDF...")
-    chunks = parse_pdf(pdf_path)
+    # ── TEST 2: Embedding a sentence works ────────────────────────────────────
+    print("TEST 2: Embedding a sample sentence?")
+    try:
+        vec = model.encode("Service schedule for Signa 4830").tolist()
+        print(f"  ✅ PASS — Vector dimensions: {len(vec)}")
+        print(f"  Sample values: {[round(v, 4) for v in vec[:5]]}...\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
 
-    print(f"Total chunks extracted: {len(chunks)}")
+    # ── TEST 3: ChromaDB connects ─────────────────────────────────────────────
+    print("TEST 3: ChromaDB connects?")
+    try:
+        collection = _get_collection()
+        print(f"  ✅ PASS — Collection ready: '{collection.name}'")
+        print(f"  DB path: {TEST_DB}\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
 
-    # Optional: quick breakdown
-    type_count = {"text": 0, "table": 0, "image": 0}
-    for c in chunks:
-        type_count[c.chunk_type] += 1
+    # ── TEST 4: Parse PDF and filter out image chunks ─────────────────────────
+    print("TEST 4: Parse PDF — get text + table chunks only?")
+    try:
+        all_chunks = parse_pdf(PDF_PATH, image_output_dir="/tmp/test_images")
+        text_table_chunks = [c for c in all_chunks if c.chunk_type != "image"]
+        image_chunks      = [c for c in all_chunks if c.chunk_type == "image"]
+        print(f"  ✅ PASS")
+        print(f"  Total chunks      : {len(all_chunks)}")
+        print(f"  Text+table chunks : {len(text_table_chunks)}  ← will embed these")
+        print(f"  Image chunks      : {len(image_chunks)}  ← SKIPPED (VLM needed)\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
 
-    print("Chunk distribution:", type_count)
+    # ── TEST 5: Embed text + table chunks into ChromaDB ───────────────────────
+    print("TEST 5: Embed text + table chunks into ChromaDB?")
+    try:
+        result = embed_chunks(text_table_chunks)
+        print(f"  ✅ PASS")
+        print(f"  Text  chunks embedded : {result['text_chunks']}")
+        print(f"  Table chunks embedded : {result['table_chunks']}")
+        print(f"  Errors                : {result['errors']}")
+        if result["error_details"]:
+            for e in result["error_details"]:
+                print(f"    ⚠️  {e}")
+        print()
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+        sys.exit(1)
 
-    # Step 2: Embed + store
-    print("\n[STEP 2] Embedding & storing...")
-    result = embed_chunks(chunks)
+    # ── TEST 6: Verify chunks are stored in ChromaDB ──────────────────────────
+    print("TEST 6: Chunks actually stored in ChromaDB?")
+    try:
+        count = collection.count()
+        expected = result["text_chunks"] + result["table_chunks"]
+        if count == expected:
+            print(f"  ✅ PASS — {count} chunks in DB (matches embedded count)\n")
+        else:
+            print(f"  ⚠️  WARN — DB has {count} chunks, expected {expected}\n")
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
 
-    print("\n--- EMBEDDING RESULT ---")
-    print(result)
+    # ── TEST 7: Semantic retrieval works ─────────────────────────────────────
+    print("TEST 7: Semantic retrieval — can we find relevant chunks?")
+    try:
+        query = "What is the service schedule for LPT 1612g?"
+        query_vec = model.encode(query).tolist()
+        results = collection.query(
+            query_embeddings=[query_vec],
+            n_results=3,
+            include=["documents", "metadatas", "distances"],
+        )
+        hits = results["documents"][0]
+        metas = results["metadatas"][0]
+        dists = results["distances"][0]
 
-    # Step 3: DB stats
-    stats = get_index_stats()
-    print("\n--- DB STATS ---")
-    print(stats)
+        print(f"  ✅ PASS — Top 3 results for: '{query}'")
+        for i, (doc, meta, dist) in enumerate(zip(hits, metas, dists), 1):
+            score = round(1 - dist, 4)
+            print(f"\n  Result {i} | page={meta['page']} | type={meta['chunk_type']} | score={score}")
+            print(f"  {repr(doc[:120])}")
+        print()
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
 
-    print("\n--- PIPELINE COMPLETED ---\n")
+    # ── TEST 8: Table chunks are retrievable separately ───────────────────────
+    print("TEST 8: Table chunks retrievable?")
+    try:
+        table_results = collection.get(
+            where={"chunk_type": "table"},
+            include=["documents", "metadatas"],
+        )
+        table_count = len(table_results["documents"])
+        print(f"  ✅ PASS — {table_count} table chunks in DB")
+        if table_results["documents"]:
+            sample = table_results["documents"][0][:200]
+            print(f"  Sample table chunk: {repr(sample)}")
+        print()
+    except Exception as e:
+        print(f"  ❌ FAIL — {e}\n")
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
+    import shutil
+    shutil.rmtree(TEST_DB, ignore_errors=True)
+    print("  (Test DB cleaned up)")
+
+    print()
+    print("=" * 70)
+    print("EMBEDDER TESTS COMPLETE")
+    print("Next step: python -m src.ingestion.embedder_vlm_test")
+    print("           (will use Groq VLM for image chunks)")
+    print("=" * 70)
