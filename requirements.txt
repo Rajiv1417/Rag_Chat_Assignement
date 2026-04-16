@@ -5,6 +5,7 @@ python-multipart==0.0.20
 
 # PDF Parsing
 pymupdf==1.25.1
+pymupdf4llm
 
 # Embeddings (local, free)
 sentence-transformers==3.3.1

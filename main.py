@@ -17,6 +17,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
 from src.api.routes import router
 
 app = FastAPI(
@@ -43,11 +47,21 @@ app.add_middleware(
 
 app.include_router(router)
 
-
-@app.get("/", include_in_schema=False)
-def root():
-    return {
-        "message": "Tata Motors Multimodal RAG API is running.",
-        "docs": "/docs",
-        "health": "/health",
-    }
+ 
+# Serve frontend UI
+frontend_dir = Path(__file__).parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+ 
+    @app.get("/", include_in_schema=False)
+    def serve_ui():
+        return FileResponse(str(frontend_dir / "index.html"))
+else:
+    @app.get("/", include_in_schema=False)
+    def root():
+        return {
+            "message": "Tata Motors Multimodal RAG API is running.",
+            "ui": "Add frontend/index.html to enable UI",
+            "docs": "/docs",
+        }
+ 

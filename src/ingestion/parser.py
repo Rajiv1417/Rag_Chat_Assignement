@@ -96,8 +96,7 @@ def parse_pdf(pdf_path: str, image_output_dir: str = "extracted_images") -> list
         try:
             tabs = page.find_tables()  # type: ignore[attr-defined]
             for table in tabs.tables:
-                data = table.extract()
-                table_text = _table_to_text(data)
+                table_text = table.to_markdown()
                 if table_text.strip():
                     table_chunks_this_page.append(ParsedChunk(
                         text=f"[TABLE]\n{table_text}",
