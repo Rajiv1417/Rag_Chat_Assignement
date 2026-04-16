@@ -4,6 +4,7 @@ md_text = pymupdf4llm.to_markdown("/workspaces/Rag_Chat_Assignement/Documens/pdf
                                 write_images=True,
                                 image_path="images_folder", # Directory where images will be saved
                                 image_format="png",         # Supported: "png", "jpg", etc.
+                                force_text=False,           # stop text extraction if images are present
                                 dpi=150  )                  # Set resolution (default is 150)
 
 # Now work with the markdown text, e.g. store as a UTF8-encoded file
