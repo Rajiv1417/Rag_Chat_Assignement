@@ -1,8 +1,12 @@
 ## _SERVICE CIRCULAR_ 
 
-**==> picture [76 x 71] intentionally omitted <==**
 
-**==> picture [7 x 54] intentionally omitted <==**
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0001-01.png)
+
+
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0001-02.png)
+
 
 ## **TATA** MOTORS 
 
@@ -14,9 +18,13 @@
 
 Representative picture of the vehicle is given below - 
 
-**==> picture [217 x 221] intentionally omitted <==**
 
-**==> picture [267 x 218] intentionally omitted <==**
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0001-08.png)
+
+
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0001-09.png)
+
 
 ## **We are enclosing the following details:** 
 
@@ -302,21 +310,33 @@ Below free services are applicable at the interval given below:
 
 - 10 driver to display the current gear during manual gear shifting and when it is appropriate to engage the next gear for optimum fuel economy. 
 
-**==> picture [148 x 126] intentionally omitted <==**
 
-**==> picture [166 x 109] intentionally omitted <==**
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0007-01.png)
 
-**==> picture [86 x 67] intentionally omitted <==**
 
-**==> picture [107 x 56] intentionally omitted <==**
 
-**==> picture [117 x 66] intentionally omitted <==**
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0007-02.png)
+
+
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0007-03.png)
+
+
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0007-04.png)
+
+
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0007-05.png)
+
 
 **– Annexure 5** 
 
 ## **- BS6 Phase 2 Exhaust System and New Sensor** 
 
-**==> picture [561 x 244] intentionally omitted <==**
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0008-02.png)
+
 
 ||**New Sensor / Actuator**||
 |---|---|---|
@@ -330,7 +350,9 @@ Below free services are applicable at the interval given below:
 
 ## **New Instrument Cluster** 
 
-**==> picture [553 x 270] intentionally omitted <==**
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0009-02.png)
+
 
 |FOTA (Firmware-<br>update Over The<br>Air)||It will illuminate for approx. 3 sec when ignition is switched ‘ON’.<br>This Indicator Turns "ON" when Firmware Over The Air Update (FOTA) is<br>Available & process initiation required. This Indicator will start "blinking"<br>once the FOTA activity is initiated.|
 |---|---|---|
@@ -350,7 +372,9 @@ Below free services are applicable at the interval given below:
 
 ## **Architecture of GDCU and FOTA function** 
 
-**==> picture [476 x 232] intentionally omitted <==**
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0010-06.png)
+
 
 - Updated Calibration firmware released on PLM server, gets transferred to UV server. 
 
@@ -427,7 +451,9 @@ Below free services are applicable at the interval given below:
 
 ## **Cruise Control Function (If Applicable)** 
 
-**==> picture [289 x 183] intentionally omitted <==**
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0012-02.png)
+
 
 - Cruise Control function helps driver to maintain a suitable vehicle speed without keeping foot on the accelerator pedal. 
 
@@ -441,7 +467,9 @@ Below free services are applicable at the interval given below:
 
 - Cruise control can be resumed by pressing **RES (Resume)** button. 
 
-**==> picture [11 x 11] intentionally omitted <==**
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0012-09.png)
+
 
 ## **Preconditions to start cruise control function** 
 
@@ -449,7 +477,9 @@ Below free services are applicable at the interval given below:
 
 - Vehicle is in 4[th] or 5[th] gear. 
 
-**==> picture [11 x 12] intentionally omitted <==**
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0012-13.png)
+
 
 ## **Temporary Disengagement of cruise control** 
 
@@ -459,7 +489,9 @@ Below free services are applicable at the interval given below:
 
 - Gear is changed 
 
-**==> picture [11 x 11] intentionally omitted <==**
+
+![](images_folder/SC_2025_36_Introduction_of_LPT_1612g_with_3.8_SGI_TC_CNG_BS6_Ph2.pdf-0012-18.png)
+
 
 ## **Automatic Disengagement of cruise control** 
 
